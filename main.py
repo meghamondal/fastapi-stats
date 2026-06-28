@@ -43,3 +43,9 @@ def stats(values: str = Query(...)):
         "max": max(nums),
         "mean": total / len(nums)
     }
+
+from fastapi import Body
+
+@app.post("/verify")
+async def verify(data: dict = Body(...)):
+    return {"valid": False}

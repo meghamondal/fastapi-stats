@@ -3,10 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 import time
 import uuid
 
+import os
+import yaml
+from dotenv import dotenv_values
+from typing import List
+
 EMAIL = "23f1000744@ds.study.iitm.ac.in"
 ALLOWED_ORIGIN = "https://dash-u7pnij.example.com"
 
 app = FastAPI()
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,6 +34,18 @@ async def add_headers(request: Request, call_next):
     response.headers["X-Process-Time"] = f"{process_time:.6f}"
 
     return response
+
+def to_bool(value):
+    return str(value).lower() in ("true", "1", "yes", "on")
+
+
+def convert_value(key, value):
+    if key in ("port", "workers"):
+        return int(value)
+    elif key == "debug":
+        return to_bool(value)
+    else:
+        return str(value)
 
 @app.get("/stats")
 def stats(values: str = Query(...)):
@@ -93,3 +111,60 @@ async def verify(data: dict = Body(...)):
             status_code=401,
             content={"valid": False},
         )
+    
+from fastapi import Query
+
+@app.get("/effective-config")
+def effective_config(set: List[str] = Query(default=[])):
+    # 1. Defaults
+    config = {
+        "port": 8000,
+        "workers": 1,
+        "debug": False,
+        "log_level": "info",
+        "api_key": "default-secret-000"
+    }
+
+    # 2. YAML
+    if os.path.exists("config.development.yaml"):
+        with open("config.development.yaml") as f:
+            yaml_config = yaml.safe_load(f) or {}
+        config.update(yaml_config)
+
+    # 3. .env
+    env_config = dotenv_values(".env")
+
+    env_map = {
+        "APP_API_KEY": "api_key",
+        "NUM_WORKERS": "workers"
+    }
+
+    for env_key, cfg_key in env_map.items():
+        value = env_config.get(env_key)
+        if value is not None:
+            config[cfg_key] = convert_value(cfg_key, value)
+
+    # 4. OS Environment
+    os_map = {
+        "APP_PORT": "port",
+        "APP_DEBUG": "debug",
+        "APP_API_KEY": "api_key",
+        "APP_LOG_LEVEL": "log_level",
+        "APP_WORKERS": "workers"
+    }
+
+    for env_key, cfg_key in os_map.items():
+        value = os.environ.get(env_key)
+        if value is not None:
+            config[cfg_key] = convert_value(cfg_key, value)
+
+    # 5. CLI overrides
+    for item in set:
+        if "=" in item:
+            key, value = item.split("=", 1)
+            config[key] = convert_value(key, value)
+
+    # Secret masking
+    config["api_key"] = "****"
+
+    return config

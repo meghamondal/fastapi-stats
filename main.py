@@ -9,16 +9,19 @@ from dotenv import dotenv_values
 from typing import List
 
 EMAIL = "23f1000744@ds.study.iitm.ac.in"
-ALLOWED_ORIGIN = "https://dash-u7pnij.example.com"
+ALLOWED_ORIGINS = [
+    "https://dash-u7pnij.example.com",
+    "https://exam.sanand.workers.dev",
+]
 
 app = FastAPI()
 
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[ALLOWED_ORIGIN],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 

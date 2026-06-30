@@ -9,6 +9,7 @@ from dotenv import dotenv_values
 from typing import List
 
 EMAIL = "23f1000744@ds.study.iitm.ac.in"
+API_KEY = "ak_0trrb6pag42fgfef75nj032v"
 ALLOWED_ORIGINS = [
     "https://dash-u7pnij.example.com",
     "https://exam.sanand.workers.dev",
@@ -171,3 +172,45 @@ def effective_config(set: List[str] = Query(default=[])):
     config["api_key"] = "****"
 
     return config
+
+from fastapi import Header, HTTPException
+
+@app.post("/analytics")
+async def analytics(
+    data: dict = Body(...),
+    x_api_key: str = Header(None)
+):
+    # Authentication
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    events = data.get("events", [])
+
+    total_events = len(events)
+
+    unique_users = len(set(event["user"] for event in events))
+
+    revenue = sum(
+        event["amount"]
+        for event in events
+        if event["amount"] > 0
+    )
+
+    totals = {}
+
+    for event in events:
+        if event["amount"] > 0:
+            totals[event["user"]] = (
+                totals.get(event["user"], 0)
+                + event["amount"]
+            )
+
+    top_user = max(totals, key=totals.get) if totals else ""
+
+    return {
+        "email": EMAIL,
+        "total_events": total_events,
+        "unique_users": unique_users,
+        "revenue": revenue,
+        "top_user": top_user,
+    }

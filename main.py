@@ -8,12 +8,25 @@ import yaml
 from dotenv import dotenv_values
 from typing import List
 
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+from fastapi.responses import Response
+import json
+
 EMAIL = "23f1000744@ds.study.iitm.ac.in"
 API_KEY = "ak_0trrb6pag42fgfef75nj032v"
 ALLOWED_ORIGINS = [
     "https://dash-u7pnij.example.com",
     "https://exam.sanand.workers.dev",
 ]
+
+START_TIME = time.time()
+
+REQUEST_COUNTER = Counter(
+    "http_requests_total",
+    "Total HTTP Requests"
+)
+
+LOGS = []
 
 app = FastAPI()
 
@@ -30,15 +43,28 @@ app.add_middleware(
 async def add_headers(request: Request, call_next):
     start = time.perf_counter()
 
+    REQUEST_COUNTER.inc()
+
+    request_id = str(uuid.uuid4())
+
     response = await call_next(request)
 
     process_time = time.perf_counter() - start
 
-    response.headers["X-Request-ID"] = str(uuid.uuid4())
+    response.headers["X-Request-ID"] = request_id
     response.headers["X-Process-Time"] = f"{process_time:.6f}"
 
-    return response
+    LOGS.append({
+    "level": "INFO",
+    "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "path": request.url.path,
+    "request_id": request_id
+})
 
+    if len(LOGS) > 1000:
+        LOGS.pop(0)
+
+    return response
 def to_bool(value):
     return str(value).lower() in ("true", "1", "yes", "on")
 
@@ -214,3 +240,35 @@ async def analytics(
         "revenue": revenue,
         "top_user": top_user,
     }
+
+@app.get("/work")
+def work(n: int = 1):
+    # Simulate K units of work
+    for _ in range(n):
+        pass
+
+    return {
+        "email": EMAIL,
+        "done": n
+    }
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(
+        generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )
+
+
+@app.get("/healthz")
+def healthz():
+    return {
+        "status": "ok",
+        "uptime_s": time.time() - START_TIME
+    }
+
+
+@app.get("/logs/tail")
+def logs_tail(limit: int = 10):
+    return LOGS[-limit:]
